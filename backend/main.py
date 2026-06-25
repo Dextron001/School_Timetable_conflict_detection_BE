@@ -138,6 +138,24 @@ async def get_all_course(
     courses = query.all()
     return courses
 
+@app.get("/courses/{day_of_the_week}", response_model=list[CourseItems])
+async def get_courses_by_day(
+    day_of_the_week: str,
+    department: str = Query(...),
+    academic_level: str = Query(None),
+    db: Session = Depends(get_db),
+    _ = Depends(verify_api_key)
+):
+    query = db.query(CourseItemDB).filter(
+        CourseItemDB.day_of_the_week == day_of_the_week.capitalize(),
+        CourseItemDB.department == department.upper()
+    )
+    if academic_level:
+        query = query.filter(CourseItemDB.academic_level == academic_level)
+
+    courses = query.all()
+    return courses
+
 
 @app.put("/generate/", response_model=list[CourseItems])
 async def generate_timetable(
@@ -156,10 +174,34 @@ async def generate_timetable(
         CourseItemDB.academic_level == academic_level
     ).all()
     
-    if not all_courses:
-        raise HTTPException(status_code=404, detail=f"No courses found for department {dept_upper}")
-
     pool = DEPARTMENT_POOLS[dept_upper]
+
+    if not all_courses:
+        # Auto-populate if none exist
+        selected_course_names = random.sample(pool["courses"], k=min(8, len(pool["courses"])))
+
+        for name in selected_course_names:
+            random_time = random.choice(TIME_SLOTS)
+            random_day = random.choice(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'])
+
+            new_course = CourseItemDB(
+                department=dept_upper,
+                academic_level=academic_level,
+                name=name,
+                course_code=f"{dept_upper}-TEMP-{random.randint(1000, 9999)}",
+                lecturer_name=random.choice(pool["lecturers"]),
+                day_of_the_week=random_day,
+                time_start=random_time[0],
+                time_end=random_time[1]
+            )
+            db.add(new_course)
+        db.commit()
+
+        # Re-fetch all courses for this dept/level
+        all_courses = db.query(CourseItemDB).filter(
+            CourseItemDB.department == dept_upper,
+            CourseItemDB.academic_level == academic_level
+        ).all()
     
     # Parse the academic level
     try:
@@ -299,25 +341,7 @@ async def export_timetable_pdf(
         
         table_data = [['Duration Block', 'Course Structure', 'Location Space', 'Assigned Personnel']]
         for c in day_courses:
-            # Extract level from course code (e.g., "CSC401" -> "400")
-            course_level = "N/A"
-            if c.course_code:
-                # Extract digits from course code
-                import re
-                digits = re.findall(r'\d+', c.course_code)
-                if digits:
-                    level_num = int(digits[0])
-                    # Determine level based on the number range
-                    if 100 <= level_num <= 199:
-                        course_level = "100 Level"
-                    elif 200 <= level_num <= 299:
-                        course_level = "200 Level"
-                    elif 300 <= level_num <= 399:
-                        course_level = "300 Level"
-                    elif 400 <= level_num <= 499:
-                        course_level = "400 Level"
-                    else:
-                        course_level = f"{level_num} Level"
+            course_level = f"{c.academic_level} Level" if c.academic_level else "N/A"
             
             table_data.append([
                 f"{c.time_start} - {c.time_end}",

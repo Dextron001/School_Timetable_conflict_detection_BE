@@ -381,7 +381,11 @@
                 
             } catch (e) {
                 console.error("Generation error:", e);
-                triggerSystemToast("Execution Fault", e.message || "Verify backend server initialization metrics.");
+                let errorMsg = e.message || "Verify backend server initialization metrics.";
+                if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+                    errorMsg = "Network Error: Could not connect to the backend server. Please ensure it is running.";
+                }
+                triggerSystemToast("Execution Fault", errorMsg);
             } finally {
                 loader.classList.add("hidden");
             }
