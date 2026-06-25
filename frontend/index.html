@@ -357,7 +357,7 @@
                 }
 
                 // Step 2: Fetch the updated courses
-                const fetchUrl = `${BACKEND_URL}/courses/?department=${encodeURIComponent(selectedDept)}`;
+                const fetchUrl = `${BACKEND_URL}/courses/?department=${encodeURIComponent(selectedDept)}&academic_level=${encodeURIComponent(selectedLevel)}`;
                 const response = await fetch(fetchUrl, {
                     method: "GET",
                     headers: { "X-API-Key": API_KEY }
@@ -448,7 +448,7 @@
             const oldData = [...globalActiveData];
             
             try {
-                const resolveUrl = `${BACKEND_URL}/resolve/?department=${encodeURIComponent(currentDepartment)}`;
+                const resolveUrl = `${BACKEND_URL}/resolve/?department=${encodeURIComponent(currentDepartment)}&academic_level=${encodeURIComponent(currentLevel)}`;
                 const response = await fetch(resolveUrl, {
                     method: "PUT",
                     headers: { "X-API-Key": API_KEY }
@@ -492,7 +492,7 @@
 
             triggerSystemToast("Export Processing", "Requesting master vector document stream from backend server...");
 
-            fetch(`${BACKEND_URL}/export-pdf/?department=${encodeURIComponent(currentDepartment)}`, {
+            fetch(`${BACKEND_URL}/export-pdf/?department=${encodeURIComponent(currentDepartment)}&academic_level=${encodeURIComponent(currentLevel)}`, {
                 method: "GET",
                 headers: {
                     "X-API-Key": API_KEY

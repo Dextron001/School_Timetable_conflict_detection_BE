@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+database.db
+fastapi.log
+/home/jules/verification/
+test_med_400.pdf

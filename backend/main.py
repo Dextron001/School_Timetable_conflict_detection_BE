@@ -39,7 +39,7 @@ class CourseItemDB(Base):
     __tablename__ = "COURSEITEM"
     id = Column(Integer, primary_key=True, index=True)
     department = Column(String, index=True)         
-    #academic_level = Column(String, index=True)     
+    academic_level = Column(String, index=True)
     name = Column(String, index=True)
     description = Column(String, nullable=True)
     course_code = Column(String, unique=True, index=True)
@@ -51,7 +51,7 @@ class CourseItemDB(Base):
 class CourseItems(BaseModel):
     id: int
     department: str
-    #academic_level: str
+    academic_level: str
     name: str
     description: str | None = None
     course_code: str
@@ -125,16 +125,17 @@ async def verify_api_key(x_api_key: str = Header(None)):
 @app.get("/courses/", response_model=list[CourseItems])
 async def get_all_course(
     department: str = Query(...), 
-    # academic_level parameter is optional for filtering if needed
-    academic_level: str = Query(None),  # Make it optional
+    academic_level: str = Query(None),
     db: Session = Depends(get_db), 
     _ = Depends(verify_api_key)
 ):
-    # Just return all courses for the department
-    # The level was only used during generation
-    courses = db.query(CourseItemDB).filter(
+    query = db.query(CourseItemDB).filter(
         CourseItemDB.department == department.upper()
-    ).all()
+    )
+    if academic_level:
+        query = query.filter(CourseItemDB.academic_level == academic_level)
+
+    courses = query.all()
     return courses
 
 
@@ -149,9 +150,10 @@ async def generate_timetable(
     if dept_upper not in DEPARTMENT_POOLS:
         raise HTTPException(status_code=400, detail="Invalid department code")
 
-    # Get ALL courses for this department
+    # Get courses for this department and level
     all_courses = db.query(CourseItemDB).filter(
-        CourseItemDB.department == dept_upper
+        CourseItemDB.department == dept_upper,
+        CourseItemDB.academic_level == academic_level
     ).all()
     
     if not all_courses:
@@ -190,6 +192,7 @@ async def generate_timetable(
         course.day_of_the_week = random_day
         course.time_start = random_time[0]
         course.time_end = random_time[1]
+        course.academic_level = academic_level
         course.description = None
         
     db.commit()
@@ -205,7 +208,7 @@ def time_to_min(time_str: str) -> int:
 @app.put("/resolve/", response_model=list[CourseItems])
 async def fix_all_course_time(
     department: str = Query(...), 
-    #academic_level: str = Query(...), 
+    academic_level: str = Query(...),
     db: Session = Depends(get_db), 
     _ = Depends(verify_api_key)
 ):
@@ -215,7 +218,7 @@ async def fix_all_course_time(
         daily_course = db.query(CourseItemDB).filter(
             CourseItemDB.day_of_the_week == day,
             CourseItemDB.department == department.upper(),
-            #CourseItemDB.academic_level == academic_level
+            CourseItemDB.academic_level == academic_level
         ).all()
         
         time_track = []
@@ -255,17 +258,21 @@ async def fix_all_course_time(
     db.commit()
     return db.query(CourseItemDB).filter(
         CourseItemDB.department == department.upper(),
-        #CourseItemDB.academic_level == academic_level
+        CourseItemDB.academic_level == academic_level
     ).all()
 
-# 6. EXPORT PDF SCOPED BY DEPT
+# 6. EXPORT PDF SCOPED BY DEPT AND LEVEL
 @app.get("/export-pdf/")
 async def export_timetable_pdf(
     department: str = Query(...),
+    academic_level: str = Query(None),
     db: Session = Depends(get_db),
     _ = Depends(verify_api_key)
 ):
-    courses = db.query(CourseItemDB).filter(CourseItemDB.department == department.upper()).all()
+    query = db.query(CourseItemDB).filter(CourseItemDB.department == department.upper())
+    if academic_level:
+        query = query.filter(CourseItemDB.academic_level == academic_level)
+    courses = query.all()
     if not courses:
         raise HTTPException(status_code=404, detail="No course records found for this department")
 
