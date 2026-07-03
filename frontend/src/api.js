@@ -1,6 +1,5 @@
 // Centralised API client. All calls attach the JWT from localStorage.
-// In production (deployed on Vercel), we auto-detect the backend URL.
-// In development (localhost), we use the local backend.
+// Auto-detects backend URL: localhost for dev, Render for production.
 const BASE_URL = import.meta.env.VITE_API_URL ||
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://127.0.0.1:8000"
@@ -12,7 +11,6 @@ function getToken() {
 
 function clearAuth() {
   localStorage.removeItem("token");
-  // Only redirect if we're not already on the login page
   if (!window.location.pathname.includes("/login")) {
     window.location.href = "/login";
   }
@@ -29,7 +27,6 @@ async function request(path, { method = "GET", body, auth = true, raw = false } 
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  // Auto-logout on expired/invalid token
   if (res.status === 401 && auth) {
     clearAuth();
     throw new Error("Session expired — please log in again.");
@@ -46,7 +43,7 @@ async function request(path, { method = "GET", body, auth = true, raw = false } 
     throw new Error(detail);
   }
 
-  if (raw) return res; // caller wants the raw Response (e.g. for blobs)
+  if (raw) return res;
   if (res.status === 204) return null;
   return res.json();
 }
@@ -57,7 +54,6 @@ export const api = {
   me: () => request("/auth/me"),
   departments: () => request("/departments"),
 
-  // Courses
   courses: (dept, level) =>
     request(`/courses?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`),
   createCourse: (payload) =>
@@ -67,7 +63,6 @@ export const api = {
   deleteCourse: (id) =>
     request(`/courses/${id}`, { method: "DELETE" }),
 
-  // Timetable actions
   conflicts: (dept, level) =>
     request(`/conflicts?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`),
   generate: (dept, level) =>
@@ -75,11 +70,9 @@ export const api = {
   resolve: (dept, level) =>
     request(`/resolve?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`, { method: "PUT" }),
 
-  // Export
   exportPdf: (dept, level) =>
     request(`/export-pdf?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`, { raw: true }),
 
-  // Users
   users: () => request("/users"),
   createUser: (payload) =>
     request("/users", { method: "POST", body: payload }),
