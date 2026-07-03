@@ -1,5 +1,10 @@
 // Centralised API client. All calls attach the JWT from localStorage.
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+// In production (deployed on Vercel), we auto-detect the backend URL.
+// In development (localhost), we use the local backend.
+const BASE_URL = import.meta.env.VITE_API_URL ||
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://127.0.0.1:8000"
+    : "https://resolvit-api.onrender.com");
 
 function getToken() {
   return localStorage.getItem("token");
