@@ -13,9 +13,13 @@ load_dotenv()  # reads backend/.env
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./timetable.db")
 
-# SQLAlchemy needs a different driver prefix for Postgres
+# Handle both old and new PostgreSQL URL formats
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Use psycopg (v3) driver for PostgreSQL on Render
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
