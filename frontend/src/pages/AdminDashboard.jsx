@@ -5,25 +5,25 @@ import ScopeSelector from "../components/ScopeSelector";
 import TimetableTable from "../components/TimetableTable";
 import EditCourseModal from "../components/EditCourseModal";
 import AddCourseModal from "../components/AddCourseModal";
+import PDFPreviewModal from "../components/PDFPreviewModal";
+import ComplaintsPanel from "../components/ComplaintsPanel";
 import { useToast } from "../context/ToastContext";
 
 export default function AdminDashboard() {
   const toast = useToast();
-  const [dept, setDept] = useState("");
-  const [level, setLevel] = useState("");
+  const [faculty, setFaculty] = useState("");  // FPAS or FSMS
   const [courses, setCourses] = useState([]);
   const [conflictIds, setConflictIds] = useState([]);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const [report, setReport] = useState(null);
-
-  const scoped = dept && level;
+  const [previewing, setPreviewing] = useState(false);
 
   async function refresh() {
     const [data, conf] = await Promise.all([
-      api.courses(dept, level),
-      api.conflicts(dept, level),
+      api.courses(faculty),
+      api.conflicts(faculty),
     ]);
     setCourses(data);
     setConflictIds(conf.conflict_ids);
@@ -31,11 +31,11 @@ export default function AdminDashboard() {
   }
 
   async function handleGenerate() {
-    if (!scoped) return toast.error("Select department and level first.");
+    if (!faculty) return toast.error("Select a faculty first.");
     setBusy(true);
     try {
       setReport(null);
-      await api.generate(dept, level);
+      await api.generate(faculty);
       const ids = await refresh();
       toast.success(
         ids.length
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     if (!courses.length) return toast.error("Generate a timetable first.");
     setBusy(true);
     try {
-      const res = await api.resolve(dept, level);
+      const res = await api.resolve(faculty);
       setReport(res.report);
       const ids = await refresh();
       toast.success(
@@ -103,12 +103,12 @@ export default function AdminDashboard() {
 
   async function handleDownload() {
     try {
-      const res = await api.exportPdf(dept, level);
+      const res = await api.exportPdf(faculty);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${dept}_${level}_Timetable.pdf`;
+      a.download = `${faculty}_Combined_Timetable.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("PDF downloaded.");
@@ -126,21 +126,19 @@ export default function AdminDashboard() {
           <div>
             <h2 className="text-xl font-bold">Generate &amp; Resolve</h2>
             <p className="text-sm text-muted">
-              Pick a scope, generate a draft, then auto-resolve any clashes.
+              Pick a faculty to generate a combined timetable for all its departments
+              and all levels (100–400). Then auto-resolve any clashes.
+              Preview the PDF output before downloading.
             </p>
           </div>
 
           <ScopeSelector
-            dept={dept}
-            level={level}
-            onChange={({ dept: d, level: l }) => {
-              setDept(d);
-              setLevel(l);
-            }}
+            faculty={faculty}
+            onChange={(f) => setFaculty(f)}
           />
 
           <div className="flex flex-wrap gap-3 pt-1">
-            <button className="btn-primary" disabled={!scoped || busy} onClick={handleGenerate}>
+            <button className="btn-primary" disabled={!faculty || busy} onClick={handleGenerate}>
               {busy ? "Working…" : "Generate timetable"}
             </button>
             <button
@@ -153,13 +151,20 @@ export default function AdminDashboard() {
             <button
               className="btn-ghost"
               disabled={!courses.length}
+              onClick={() => setPreviewing(true)}
+            >
+              👁 Preview PDF
+            </button>
+            <button
+              className="btn-ghost"
+              disabled={!courses.length}
               onClick={handleDownload}
             >
               ⬇ Download PDF
             </button>
             <button
               className="btn-ghost"
-              disabled={!scoped}
+              disabled={!faculty}
               onClick={() => setAdding(true)}
             >
               + Add course
@@ -222,7 +227,7 @@ export default function AdminDashboard() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wide text-muted">
-              Timetable {scoped && `· ${dept} ${level}L`}
+              Timetable {faculty && `· ${faculty} (All Departments, All Levels)`}
             </h3>
             {conflictIds.length > 0 && (
               <span className="badge bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200">
@@ -238,6 +243,9 @@ export default function AdminDashboard() {
             onEdit={setEditing}
           />
         </div>
+
+        {/* Admin complaints section */}
+        <ComplaintsPanel />
       </main>
 
       {editing && (
@@ -250,10 +258,20 @@ export default function AdminDashboard() {
 
       {adding && (
         <AddCourseModal
-          department={dept}
-          academicLevel={level}
+          faculty={faculty}
           onClose={() => setAdding(false)}
           onSave={handleAddCourse}
+        />
+      )}
+
+      {previewing && (
+        <PDFPreviewModal
+          faculty={faculty}
+          onClose={() => setPreviewing(false)}
+          onDownloaded={() => {
+            setPreviewing(false);
+            toast.success("PDF downloaded.");
+          }}
         />
       )}
     </div>

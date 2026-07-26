@@ -1,9 +1,6 @@
 // Centralised API client. All calls attach the JWT from localStorage.
-// Auto-detects backend URL: localhost for dev, Render for production.
-const BASE_URL = import.meta.env.VITE_API_URL ||
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "http://127.0.0.1:8000"
-    : "https://resolvit-api.onrender.com");
+// Scope is FACULTY-level (FPAS or FSMS), not individual departments.
+const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function getToken() {
   return localStorage.getItem("token");
@@ -14,6 +11,16 @@ function clearAuth() {
   if (!window.location.pathname.includes("/login")) {
     window.location.href = "/login";
   }
+}
+
+function buildQuery(params) {
+  const parts = [];
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      parts.push(`${key}=${encodeURIComponent(val)}`);
+    }
+  }
+  return parts.length ? `?${parts.join("&")}` : "";
 }
 
 async function request(path, { method = "GET", body, auth = true, raw = false } = {}) {
@@ -52,10 +59,10 @@ export const api = {
   login: (username, password) =>
     request("/auth/login", { method: "POST", body: { username, password }, auth: false }),
   me: () => request("/auth/me"),
-  departments: () => request("/departments"),
+  faculties: () => request("/faculties"),
 
-  courses: (dept, level) =>
-    request(`/courses?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`),
+  courses: (faculty) =>
+    request(`/courses${buildQuery({ faculty })}`),
   createCourse: (payload) =>
     request("/courses", { method: "POST", body: payload }),
   updateCourse: (id, payload) =>
@@ -63,15 +70,15 @@ export const api = {
   deleteCourse: (id) =>
     request(`/courses/${id}`, { method: "DELETE" }),
 
-  conflicts: (dept, level) =>
-    request(`/conflicts?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`),
-  generate: (dept, level) =>
-    request(`/generate?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`, { method: "PUT" }),
-  resolve: (dept, level) =>
-    request(`/resolve?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`, { method: "PUT" }),
+  conflicts: (faculty) =>
+    request(`/conflicts${buildQuery({ faculty })}`),
+  generate: (faculty) =>
+    request(`/generate${buildQuery({ faculty })}`, { method: "PUT" }),
+  resolve: (faculty) =>
+    request(`/resolve${buildQuery({ faculty })}`, { method: "PUT" }),
 
-  exportPdf: (dept, level) =>
-    request(`/export-pdf?department=${encodeURIComponent(dept)}&academic_level=${encodeURIComponent(level)}`, { raw: true }),
+  exportPdf: (faculty) =>
+    request(`/export-pdf${buildQuery({ faculty })}`, { raw: true }),
 
   users: () => request("/users"),
   createUser: (payload) =>
@@ -80,6 +87,15 @@ export const api = {
     request(`/users/${id}`, { method: "PATCH", body: payload }),
   deleteUser: (id) =>
     request(`/users/${id}`, { method: "DELETE" }),
+
+  // ── Complaints ──
+  submitComplaint: (payload) =>
+    request("/complaints", { method: "POST", body: payload }),
+  complaints: (faculty, status) =>
+    request(`/complaints${buildQuery({ faculty, status })}`),
+  resolveComplaint: (id, payload) =>
+    request(`/complaints/${id}`, { method: "PATCH", body: payload }),
+  myComplaints: () => request("/complaints/my"),
 };
 
 export { BASE_URL };

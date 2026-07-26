@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-const SLOTS = ["07:00", "08:30", "10:00", "11:30", "13:00", "14:30", "16:00"];
+const SLOTS = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
 
 export default function EditCourseModal({ course, onClose, onSave }) {
   const [form, setForm] = useState(null);
@@ -28,7 +28,7 @@ export default function EditCourseModal({ course, onClose, onSave }) {
       <div className="card w-full max-w-lg p-6 space-y-5">
         <div>
           <h3 className="text-lg font-bold">Edit Course</h3>
-          <p className="text-sm text-muted">{course.course_code}</p>
+          <p className="text-sm text-muted">{course.course_code} · {course.department} {course.academic_level}L</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

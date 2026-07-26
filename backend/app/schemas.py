@@ -31,7 +31,6 @@ class UserCreate(BaseModel):
     password: str
     role: str = "client"  # 'admin' or 'client'
 
-
 class UserUpdate(BaseModel):
     """Fields an admin can edit on a user (all optional)."""
     full_name: str | None = None
@@ -64,8 +63,8 @@ class CourseCreate(BaseModel):
     course_code: str
     lecturer_name: str
     day_of_the_week: str = "Monday"
-    time_start: str = "08:30"
-    time_end: str = "10:00"
+    time_start: str = "08:00"
+    time_end: str = "09:00"
 
 
 class CourseUpdate(BaseModel):
@@ -76,3 +75,36 @@ class CourseUpdate(BaseModel):
     day_of_the_week: str | None = None
     time_start: str | None = None
     time_end: str | None = None
+
+
+# ---------- Complaints ----------
+class ComplaintCreate(BaseModel):
+    faculty: str                          # FPAS or FSMS
+    course_code: str | None = None        # optional specific course
+    subject: str                          # short title
+    message: str                          # full complaint text
+
+
+class ComplaintOut(BaseModel):
+    id: int
+    user_id: int
+    username: str | None = None           # filled from join
+    full_name: str | None = None          # filled from join
+    faculty: str
+    course_code: str | None = None
+    subject: str
+    message: str
+    status: str
+    admin_note: str | None = None
+    created_at: str | None = None         # formatted datetime string
+    resolved_at: str | None = None
+    resolved_by: str | None = None        # admin username who resolved
+
+    class Config:
+        from_attributes = True
+
+
+class ComplaintResolve(BaseModel):
+    """Admin action on a complaint."""
+    status: str                           # 'resolved' or 'dismissed'
+    admin_note: str | None = None         # optional reply

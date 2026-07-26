@@ -1,10 +1,12 @@
 """Core timetable logic: time helpers, conflict detection, generation, resolution.
 
-Generation produces a deliberately messy DRAFT (so there's something to fix in
-the demo). Resolution uses the DSATUR graph-colouring scheduler in scheduler.py
-to produce a clash-free timetable.
+Generation produces a deliberately messy DRAFT. Resolution uses the DSATUR
+graph-colouring scheduler to produce a clash-free timetable.
 
-All times are 24-hour 'HH:MM'.
+All times are 24-hour 'HH:MM' (1-hour slots matching institution pattern).
+
+Scope is FACULTY-level: generate/resolve operate on ALL departments within
+a faculty and ALL levels (100–400) combined.
 """
 import random
 
@@ -12,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .models import CourseItem
 from .scheduler import schedule_courses
-from .seed import DAYS, DEPARTMENT_POOLS, TIME_SLOTS, VENUES
+from .seed import DAYS, DEPARTMENT_POOLS, FACULTIES, FACULTY_VENUES, TIME_SLOTS
 
 
 def time_to_min(time_str: str) -> int:
@@ -31,12 +33,7 @@ def _time_overlap(a: CourseItem, b: CourseItem) -> bool:
 
 
 def conflict_reason(a: CourseItem, b: CourseItem) -> str | None:
-    """Return why a and b clash, or None if they don't.
-
-    A clash only matters when the two courses are scheduled at the same time.
-    Given that, they conflict if they are the same cohort (a student can't be in
-    two places), share a lecturer, or share a venue.
-    """
+    """Return why a and b clash, or None if they don't."""
     if a.id == b.id:
         return None
     if not _time_overlap(a, b):
@@ -61,28 +58,33 @@ def find_conflicts(courses: list[CourseItem]) -> set[int]:
     return conflicting
 
 
-def generate_for(db: Session, department: str, level: str) -> list[CourseItem]:
-    """Create a fresh, intentionally messy DRAFT timetable for a dept/level.
+def generate_for(db: Session, faculty: str) -> list[CourseItem]:
+    """Create a fresh DRAFT timetable for a faculty (all departments, all levels).
 
-    Random placement here is fine: it just produces the input that the DSATUR
-    scheduler then solves. (Generation = the problem; Resolve = the algorithm.)
+    Randomly assigns time slots, venues, names, and lecturers to all courses
+    belonging to departments within the given faculty.
     """
-    dept = department.upper()
-    if dept not in DEPARTMENT_POOLS:
+    fac = faculty.upper()
+    if fac not in FACULTIES:
         return []
 
-    pool = DEPARTMENT_POOLS[dept]
-    courses = (
-        db.query(CourseItem)
-        .filter(CourseItem.department == dept, CourseItem.academic_level == level)
-        .all()
-    )
+    dept_codes = FACULTIES[fac]["departments"]
+    courses = db.query(CourseItem).filter(
+        CourseItem.department.in_(dept_codes),
+    ).all()
 
+    if not courses:
+        return []
+
+    # Use faculty-specific venues for realism
+    venues = FACULTY_VENUES.get(fac, FACULTY_VENUES["FPAS"])
     used_codes = {c.course_code for c in db.query(CourseItem.course_code).all()}
 
     for c in courses:
+        dept = c.department
+        pool = DEPARTMENT_POOLS[dept]
         for _ in range(50):
-            num = int(level) + random.randint(1, 98)
+            num = int(c.academic_level) + random.randint(1, 98)
             code = f"{dept}{num}"
             if code not in used_codes or code == c.course_code:
                 break
@@ -96,23 +98,30 @@ def generate_for(db: Session, department: str, level: str) -> list[CourseItem]:
         c.day_of_the_week = random.choice(DAYS)
         c.time_start = start
         c.time_end = end
-        c.description = random.choice(VENUES)
+        c.description = random.choice(venues)
 
     db.commit()
     return courses
 
 
-def resolve_for(db: Session, department: str, level: str) -> dict:
-    """Produce a clash-free timetable using DSATUR graph colouring.
+def resolve_for(db: Session, faculty: str) -> dict:
+    """Produce a clash-free timetable using DSATUR graph colouring for a faculty.
 
-    Returns a report dict from the scheduler (algorithm name, node/edge counts,
-    colours used) so the UI can show what happened.
+    Operates on ALL departments in the faculty and ALL levels combined.
     """
-    dept = department.upper()
-    courses = (
-        db.query(CourseItem)
-        .filter(CourseItem.department == dept, CourseItem.academic_level == level)
-        .all()
-    )
+    fac = faculty.upper()
+    if fac not in FACULTIES:
+        return {
+            "algorithm": "DSATUR graph colouring", "nodes": 0, "edges": 0,
+            "colours_used": 0, "slots_available": 40, "soft_penalty": 0,
+            "comparison": {"dsatur_slots": 0, "greedy_slots": 0,
+                           "dsatur_penalty": 0, "greedy_penalty": 0},
+        }
+
+    dept_codes = FACULTIES[fac]["departments"]
+    courses = db.query(CourseItem).filter(
+        CourseItem.department.in_(dept_codes),
+    ).all()
+
     report = schedule_courses(db, courses)
     return report

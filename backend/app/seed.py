@@ -1,6 +1,11 @@
 """Seed users and a baseline set of courses.
 
-Times are stored in 24-hour 'HH:MM' format.
+Times are stored in 24-hour 'HH:MM' format, matching the institution pattern:
+1-hour lecture slots with a lunch break at 12–1pm.
+
+Faculty-based structure:
+  FPAS = Faculty of Pure and Applied Sciences  (CSC, SEN, CYB, BCH, MCB, EEE)
+  FSMS = Faculty of Social and Management Sciences (ECO, LAW, MAS, ACC, BUS)
 """
 import random
 
@@ -9,23 +14,64 @@ from sqlalchemy.orm import Session
 from .auth import hash_password
 from .models import CourseItem, User
 
-# 24-hour time slots (fixes the old 1:00 == 1am bug)
+# ── Faculties ──────────────────────────────────────────────────────────────
+FACULTIES = {
+    "FPAS": {
+        "name": "Faculty of Pure and Applied Sciences",
+        "departments": ["CSC", "SEN", "CYB", "BCH", "MCB", "EEE"],
+    },
+    "FSMS": {
+        "name": "Faculty of Social and Management Sciences",
+        "departments": ["ECO", "LAW", "MAS", "ACC", "BUS"],
+    },
+}
+
+# Reverse lookup: department code → faculty code
+DEPT_TO_FACULTY: dict[str, str] = {}
+for _fac_code, _fac_data in FACULTIES.items():
+    for _dept_code in _fac_data["departments"]:
+        DEPT_TO_FACULTY[_dept_code] = _fac_code
+
+# ── Time slots (1-hour, 8am–5pm, no teaching at 12–1pm) ──────────────────
 TIME_SLOTS = [
-    ("07:00", "08:30"),
-    ("08:30", "10:00"),
-    ("10:00", "11:30"),
-    ("11:30", "13:00"),
-    ("13:00", "14:30"),
-    ("14:30", "16:00"),
+    ("08:00", "09:00"),
+    ("09:00", "10:00"),
+    ("10:00", "11:00"),
+    ("11:00", "12:00"),
+    # 12:00-13:00 = BREAK (not a teaching slot)
+    ("13:00", "14:00"),
+    ("14:00", "15:00"),
+    ("15:00", "16:00"),
+    ("16:00", "17:00"),
 ]
+
+BREAK_SLOT = ("12:00", "13:00")  # lunch break — no courses scheduled here
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
-VENUES = [
-    "LT 1", "LT 2", "Hall A", "Hall B", "Lab 1", "Lab 2",
-    "Room 101", "Room 204", "Auditorium", "Studio 3",
+# ── Venues (faculty-specific + shared) ────────────────────────────────────
+FACULTY_VENUES = {
+    "FPAS": [
+        "FPAS CSC LH", "FPAS CSC1 LH", "FPAS CSC2 LH",
+        "FPAS BCH LH", "FPAS MCB LH", "FPAS MCB LAB",
+        "FPAS PHY LH", "FPAS PHY LAB", "FPAS CYB LH",
+        "FPAS LH 101", "FPAS 001 LH", "FPAS SEN LH",
+        "NH LAB", "Auditorium",
+    ],
+    "FSMS": [
+        "FSMS LH 101", "FSMS LH 102", "FSMS ECO LH",
+        "FSMS LAW LH", "FSMS MAS LH", "FSMS ACC LH",
+        "FSMS BUS LH", "FSMS AUD",
+        "NH LAB", "Auditorium",
+    ],
+}
+
+# Combined list (used by seed_courses for initial random assignment)
+VENUES = FACULTY_VENUES["FPAS"] + [
+    v for v in FACULTY_VENUES["FSMS"] if v not in FACULTY_VENUES["FPAS"]
 ]
 
+# ── Department pools (courses & lecturers per department) ──────────────────
 DEPARTMENT_POOLS = {
     "CSC": {
         "name": "Computer Science",
@@ -36,14 +82,42 @@ DEPARTMENT_POOLS = {
         "lecturers": ["Mr Andrew", "Mrs Bukola", "Mr Taiwo", "Mr Grayson", "Mrs Jade",
                       "Mr Olubiyi", "Mr Adisa", "Mr Richard", "Mrs Oyewale", "Mr Adekunle"],
     },
-    "ECO": {
-        "name": "Economics",
-        "courses": ["Microeconomics I", "Macroeconomics I", "Statistics for Economists",
-                    "Development Economics", "Monetary Economics", "Public Finance",
-                    "International Trade", "Econometrics I", "Labour Economics",
-                    "Agricultural Economics", "Industrial Economics", "Economic Planning"],
-        "lecturers": ["Dr. Emeka Okafor", "Mrs. Funmi Adeyemi", "Prof. Chukwudi Nwachukwu",
-                      "Mr. Tunde Fashola", "Dr. Amaka Eze"],
+    "SEN": {
+        "name": "Software Engineering",
+        "courses": ["Software Requirements Engineering", "Software Design & Architecture",
+                    "Object-Oriented Programming", "Web Application Development",
+                    "Software Testing & QA", "Agile & DevOps", "Mobile App Development",
+                    "Database Systems", "Software Project Management", "Human-Computer Interaction",
+                    "Distributed Systems", "Cloud Computing"],
+        "lecturers": ["Mr. David Okon", "Mrs. Sandra Ike", "Dr. Tobi Aluko",
+                      "Mr. Chidi Umeh", "Prof. Lola Adeniran"],
+    },
+    "CYB": {
+        "name": "Cyber Security",
+        "courses": ["Introduction to Cyber Security", "Network Security", "Cryptography",
+                    "Ethical Hacking", "Digital Forensics", "Information Security Management",
+                    "Malware Analysis", "Secure Software Development", "Cloud Security",
+                    "Incident Response", "Penetration Testing", "Security Governance & Compliance"],
+        "lecturers": ["Dr. Ahmed Bello", "Mrs. Joy Eke", "Mr. Kelvin Obi",
+                      "Dr. Funke Ojo", "Prof. Hassan Ibrahim"],
+    },
+    "BCH": {
+        "name": "Biochemistry",
+        "courses": ["General Biochemistry", "Enzymology", "Metabolism", "Molecular Biology",
+                    "Clinical Biochemistry", "Bioenergetics", "Protein Chemistry",
+                    "Nucleic Acid Biochemistry", "Membrane Biochemistry", "Immunochemistry",
+                    "Pharmaceutical Biochemistry", "Plant Biochemistry"],
+        "lecturers": ["Prof. Ngozi Obi", "Dr. Emeka Nwankwo", "Mrs. Bola Fashola",
+                      "Dr. Yusuf Bello", "Prof. Adaeze Okeke"],
+    },
+    "MCB": {
+        "name": "Microbiology",
+        "courses": ["General Microbiology", "Bacteriology", "Virology", "Mycology",
+                    "Medical Microbiology", "Industrial Microbiology", "Food Microbiology",
+                    "Environmental Microbiology", "Microbial Genetics", "Immunology",
+                    "Parasitology", "Pharmaceutical Microbiology"],
+        "lecturers": ["Dr. Ifeoma Eze", "Prof. Kunle Adebayo", "Mrs. Hauwa Sani",
+                      "Dr. Chibuzo Anyaegbu", "Prof. Femi Olaniyi"],
     },
     "EEE": {
         "name": "Electrical Engineering",
@@ -53,6 +127,15 @@ DEPARTMENT_POOLS = {
                     "Signal Processing", "Power Electronics", "Instrumentation"],
         "lecturers": ["Engr. Babatunde Ogundimu", "Dr. Ifeanyi Obi", "Prof. Segun Adeleke",
                       "Mrs. Ngozi Ike", "Mr. Kayode Salami"],
+    },
+    "ECO": {
+        "name": "Economics",
+        "courses": ["Microeconomics I", "Macroeconomics I", "Statistics for Economists",
+                    "Development Economics", "Monetary Economics", "Public Finance",
+                    "International Trade", "Econometrics I", "Labour Economics",
+                    "Agricultural Economics", "Industrial Economics", "Economic Planning"],
+        "lecturers": ["Dr. Emeka Okafor", "Mrs. Funmi Adeyemi", "Prof. Chukwudi Nwachukwu",
+                      "Mr. Tunde Fashola", "Dr. Amaka Eze"],
     },
     "LAW": {
         "name": "Law",
@@ -81,24 +164,6 @@ DEPARTMENT_POOLS = {
         "lecturers": ["Dr. Tunde Bakare", "Mrs. Chidinma Eze", "Prof. Sola Adewale",
                       "Mr. Gbenga Adeyemi", "Dr. Patience Udo"],
     },
-    "BCH": {
-        "name": "Biochemistry",
-        "courses": ["General Biochemistry", "Enzymology", "Metabolism", "Molecular Biology",
-                    "Clinical Biochemistry", "Bioenergetics", "Protein Chemistry",
-                    "Nucleic Acid Biochemistry", "Membrane Biochemistry", "Immunochemistry",
-                    "Pharmaceutical Biochemistry", "Plant Biochemistry"],
-        "lecturers": ["Prof. Ngozi Obi", "Dr. Emeka Nwankwo", "Mrs. Bola Fashola",
-                      "Dr. Yusuf Bello", "Prof. Adaeze Okeke"],
-    },
-    "MCB": {
-        "name": "Microbiology",
-        "courses": ["General Microbiology", "Bacteriology", "Virology", "Mycology",
-                    "Medical Microbiology", "Industrial Microbiology", "Food Microbiology",
-                    "Environmental Microbiology", "Microbial Genetics", "Immunology",
-                    "Parasitology", "Pharmaceutical Microbiology"],
-        "lecturers": ["Dr. Ifeoma Eze", "Prof. Kunle Adebayo", "Mrs. Hauwa Sani",
-                      "Dr. Chibuzo Anyaegbu", "Prof. Femi Olaniyi"],
-    },
     "BUS": {
         "name": "Business Administration",
         "courses": ["Principles of Management", "Business Communication", "Organisational Behaviour",
@@ -107,25 +172,6 @@ DEPARTMENT_POOLS = {
                     "Corporate Finance", "Project Management", "International Business"],
         "lecturers": ["Dr. Halima Yusuf", "Prof. Chukwuma Eze", "Mrs. Toyin Bankole",
                       "Mr. Segun Afolayan", "Dr. Amaka Nwosu"],
-    },
-    "SEN": {
-        "name": "Software Engineering",
-        "courses": ["Software Requirements Engineering", "Software Design & Architecture",
-                    "Object-Oriented Programming", "Web Application Development",
-                    "Software Testing & QA", "Agile & DevOps", "Mobile App Development",
-                    "Database Systems", "Software Project Management", "Human-Computer Interaction",
-                    "Distributed Systems", "Cloud Computing"],
-        "lecturers": ["Mr. David Okon", "Mrs. Sandra Ike", "Dr. Tobi Aluko",
-                      "Mr. Chidi Umeh", "Prof. Lola Adeniran"],
-    },
-    "CYB": {
-        "name": "Cyber Security",
-        "courses": ["Introduction to Cyber Security", "Network Security", "Cryptography",
-                    "Ethical Hacking", "Digital Forensics", "Information Security Management",
-                    "Malware Analysis", "Secure Software Development", "Cloud Security",
-                    "Incident Response", "Penetration Testing", "Security Governance & Compliance"],
-        "lecturers": ["Dr. Ahmed Bello", "Mrs. Joy Eke", "Mr. Kelvin Obi",
-                      "Dr. Funke Ojo", "Prof. Hassan Ibrahim"],
     },
 }
 
@@ -162,16 +208,21 @@ def _make_course(dept: str, level: str, idx: int, pool: dict) -> CourseItem:
 
 
 def seed_courses(db: Session) -> None:
-    if db.query(CourseItem).count() > 0:
-        return
+    # Find which departments already exist in the DB
+    existing_depts = {row[0] for row in db.query(CourseItem.department).distinct().all()}
+
     items: list[CourseItem] = []
     for dept, pool in DEPARTMENT_POOLS.items():
+        if dept in existing_depts:
+            continue  # already seeded — skip
         for level in LEVELS:
-            # 6 courses per dept/level
-            for i in range(6):
+            # 4 courses per dept/level — gives breathing space (gaps) between lectures
+            for i in range(4):
                 items.append(_make_course(dept, level, i, pool))
-    db.add_all(items)
-    db.commit()
+
+    if items:
+        db.add_all(items)
+        db.commit()
 
 
 def seed_all(db: Session) -> None:

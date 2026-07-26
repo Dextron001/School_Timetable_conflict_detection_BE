@@ -3,31 +3,34 @@ import { api } from "../api";
 import DashboardHeader from "../components/DashboardHeader";
 import ScopeSelector from "../components/ScopeSelector";
 import TimetableTable from "../components/TimetableTable";
+import PDFPreviewModal from "../components/PDFPreviewModal";
+import ComplaintModal from "../components/ComplaintModal";
+import MyComplaints from "../components/MyComplaints";
 import { useToast } from "../context/ToastContext";
 
 export default function ClientDashboard() {
   const toast = useToast();
-  const [dept, setDept] = useState("");
-  const [level, setLevel] = useState("");
+  const [faculty, setFaculty] = useState("");  // FPAS or FSMS
   const [courses, setCourses] = useState([]);
   const [conflictIds, setConflictIds] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
-
-  const scoped = dept && level;
+  const [previewing, setPreviewing] = useState(false);
+  const [complaining, setComplaining] = useState(false);
+  const [refreshMyComplaints, setRefreshMyComplaints] = useState(0);
 
   async function handleView() {
-    if (!scoped) return toast.error("Select department and level first.");
+    if (!faculty) return toast.error("Select a faculty first.");
     setBusy(true);
     try {
       const [data, conf] = await Promise.all([
-        api.courses(dept, level),
-        api.conflicts(dept, level),
+        api.courses(faculty),
+        api.conflicts(faculty),
       ]);
       setCourses(data);
       setConflictIds(conf.conflict_ids);
       setLoaded(true);
-      if (!data.length) toast.info("No courses published for this scope yet.");
+      if (!data.length) toast.info("No courses published for this faculty yet.");
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -37,12 +40,12 @@ export default function ClientDashboard() {
 
   async function handleDownload() {
     try {
-      const res = await api.exportPdf(dept, level);
+      const res = await api.exportPdf(faculty);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${dept}_${level}_Timetable.pdf`;
+      a.download = `${faculty}_Combined_Timetable.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("PDF downloaded.");
@@ -60,26 +63,31 @@ export default function ClientDashboard() {
           <div>
             <h2 className="text-xl font-bold">My Timetable</h2>
             <p className="text-sm text-muted">
-              Choose your department and level to view the published schedule.
+              Choose your faculty to view the combined timetable for all
+              departments and all levels (100–400). Preview or download the PDF.
             </p>
           </div>
 
           <ScopeSelector
-            dept={dept}
-            level={level}
-            onChange={({ dept: d, level: l }) => {
-              setDept(d);
-              setLevel(l);
+            faculty={faculty}
+            onChange={(f) => {
+              setFaculty(f);
               setLoaded(false);
             }}
           />
 
           <div className="flex flex-wrap gap-3 pt-1">
-            <button className="btn-primary" disabled={!scoped || busy} onClick={handleView}>
+            <button className="btn-primary" disabled={!faculty || busy} onClick={handleView}>
               {busy ? "Loading…" : "View timetable"}
+            </button>
+            <button className="btn-ghost" disabled={!courses.length} onClick={() => setPreviewing(true)}>
+              👁 Preview PDF
             </button>
             <button className="btn-ghost" disabled={!courses.length} onClick={handleDownload}>
               ⬇ Download PDF
+            </button>
+            <button className="btn-ghost" disabled={!faculty} onClick={() => setComplaining(true)}>
+              📢 Report issue
             </button>
           </div>
         </div>
@@ -88,7 +96,7 @@ export default function ClientDashboard() {
           <div className="card p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-wide text-muted">
-                {dept} · {level} Level
+                {faculty} · All Departments · All Levels
               </h3>
               {conflictIds.length > 0 && (
                 <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">
@@ -99,7 +107,29 @@ export default function ClientDashboard() {
             <TimetableTable courses={courses} conflictIds={conflictIds} />
           </div>
         )}
+
+        {/* My complaints section */}
+        <MyComplaints key={refreshMyComplaints} />
       </main>
+
+      {previewing && (
+        <PDFPreviewModal
+          faculty={faculty}
+          onClose={() => setPreviewing(false)}
+          onDownloaded={() => {
+            setPreviewing(false);
+            toast.success("PDF downloaded.");
+          }}
+        />
+      )}
+
+      {complaining && (
+        <ComplaintModal
+          faculty={faculty}
+          onClose={() => setComplaining(false)}
+          onSubmitted={() => setRefreshMyComplaints((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

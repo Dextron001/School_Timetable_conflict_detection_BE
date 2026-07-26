@@ -1,5 +1,7 @@
 """SQLAlchemy ORM models."""
-from sqlalchemy import Column, Integer, String
+from datetime import datetime, timezone
+
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from .database import Base
 
 
@@ -33,3 +35,20 @@ class CourseItem(Base):
     day_of_the_week = Column(String, nullable=False, default="Monday")
     time_start = Column(String, nullable=False, default="08:30")
     time_end = Column(String, nullable=False, default="10:00")
+
+
+class Complaint(Base):
+    """A timetable complaint submitted by a client user."""
+    __tablename__ = "complaints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    faculty = Column(String, nullable=False)           # FPAS or FSMS
+    course_code = Column(String, nullable=True)        # specific course if applicable
+    subject = Column(String, nullable=False)           # short title
+    message = Column(Text, nullable=False)             # full complaint text
+    status = Column(String, nullable=False, default="pending")  # pending / resolved / dismissed
+    admin_note = Column(Text, nullable=True)           # admin's reply/note
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
