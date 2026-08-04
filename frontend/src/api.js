@@ -70,6 +70,7 @@ export const api = {
   deleteCourse: (id) =>
     request(`/courses/${id}`, { method: "DELETE" }),
 
+  // Conflicts now returns both IDs and detailed causes
   conflicts: (faculty) =>
     request(`/conflicts${buildQuery({ faculty })}`),
   generate: (faculty) =>
@@ -96,6 +97,15 @@ export const api = {
   resolveComplaint: (id, payload) =>
     request(`/complaints/${id}`, { method: "PATCH", body: payload }),
   myComplaints: () => request("/complaints/my"),
+
+  // ── Complaint Messages ──
+  getMessages: (complaintId) =>
+    request(`/complaints/${complaintId}/messages`),
+  sendMessage: (complaintId, message) =>
+    request(`/complaints/${complaintId}/messages`, { method: "POST", body: { message } }),
+
+  // ── Notifications ──
+  notifications: () => request("/notifications"),
 };
 
 export { BASE_URL };

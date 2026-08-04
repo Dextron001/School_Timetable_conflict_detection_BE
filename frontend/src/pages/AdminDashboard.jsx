@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import DashboardHeader from "../components/DashboardHeader";
 import ScopeSelector from "../components/ScopeSelector";
@@ -14,21 +14,39 @@ export default function AdminDashboard() {
   const [faculty, setFaculty] = useState("");  // FPAS or FSMS
   const [courses, setCourses] = useState([]);
   const [conflictIds, setConflictIds] = useState([]);
+  const [conflictDetails, setConflictDetails] = useState([]);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const [report, setReport] = useState(null);
   const [previewing, setPreviewing] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    if (!faculty) return;
     const [data, conf] = await Promise.all([
       api.courses(faculty),
       api.conflicts(faculty),
     ]);
     setCourses(data);
     setConflictIds(conf.conflict_ids);
+    setConflictDetails(conf.conflicts || []);
     return conf.conflict_ids;
-  }
+  }, [faculty]);
+
+  // Auto-load courses when faculty changes
+  useEffect(() => {
+    if (faculty) {
+      refresh().catch(() => {
+        setCourses([]);
+        setConflictIds([]);
+        setConflictDetails([]);
+      });
+    } else {
+      setCourses([]);
+      setConflictIds([]);
+      setConflictDetails([]);
+    }
+  }, [faculty, refresh]);
 
   async function handleGenerate() {
     if (!faculty) return toast.error("Select a faculty first.");
@@ -58,7 +76,7 @@ export default function AdminDashboard() {
       const ids = await refresh();
       toast.success(
         ids.length
-          ? "Some conflicts could not be auto-resolved (timetable too small)."
+          ? `Resolved with ${ids.length} minor venue overlap(s) remaining.`
           : `Solved with ${res.report.algorithm} ✔`
       );
     } catch (e) {
@@ -238,6 +256,7 @@ export default function AdminDashboard() {
           <TimetableTable
             courses={courses}
             conflictIds={conflictIds}
+            conflictDetails={conflictDetails}
             editable
             onDelete={handleDeleteCourse}
             onEdit={setEditing}

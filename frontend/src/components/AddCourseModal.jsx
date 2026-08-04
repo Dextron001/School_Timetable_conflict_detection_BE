@@ -4,29 +4,24 @@ import { api } from "../api";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const SLOTS = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
 const LEVELS = ["100", "200", "300", "400"];
+const UNIT_OPTIONS = [1, 2, 3];
+const SESSION_OPTIONS = ["A", "B"];
 
 export default function AddCourseModal({ faculty, onClose, onSave }) {
   const [departments, setDepartments] = useState([]);
   const [form, setForm] = useState({
-    course_code: "",
-    name: "",
-    lecturer_name: "",
-    description: "",
-    department: "",
-    academic_level: "100",
-    day_of_the_week: "Monday",
-    time_start: "08:00",
-    time_end: "09:00",
+    course_code: "", name: "", lecturer_name: "", description: "",
+    department: "", academic_level: "100",
+    day_of_the_week: "Monday", time_start: "08:00", time_end: "09:00",
+    units: 1, session: "A",
   });
 
-  // Load departments for this faculty
   useEffect(() => {
     if (!faculty) return;
     api.faculties().then((faculties) => {
       const fac = faculties.find(f => f.code === faculty);
       if (fac) {
         setDepartments(fac.departments);
-        // Auto-select first department
         if (fac.departments.length > 0 && !form.department) {
           setForm((f) => ({ ...f, department: fac.departments[0].code }));
         }
@@ -38,13 +33,8 @@ export default function AddCourseModal({ faculty, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.course_code || !form.name || !form.lecturer_name || !form.department) {
-      return;
-    }
-    onSave({
-      ...form,
-      department: form.department,
-    });
+    if (!form.course_code || !form.name || !form.lecturer_name || !form.department) return;
+    onSave({ ...form, department: form.department, units: Number(form.units) });
   };
 
   return (
@@ -52,19 +42,14 @@ export default function AddCourseModal({ faculty, onClose, onSave }) {
       <div className="card w-full max-w-lg p-6 space-y-5">
         <div>
           <h3 className="text-lg font-bold">Add Course</h3>
-          <p className="text-sm text-muted">
-            Adding to {faculty} — pick a department within this faculty
-          </p>
+          <p className="text-sm text-muted">Adding to {faculty} — pick a department within this faculty</p>
         </div>
-
         <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Department *</label>
             <select className="input" value={form.department} onChange={(e) => set("department", e.target.value)} required>
               <option value="">Select department</option>
-              {departments.map((d) => (
-                <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
-              ))}
+              {departments.map((d) => (<option key={d.code} value={d.code}>{d.name} ({d.code})</option>))}
             </select>
           </div>
           <div>
@@ -88,6 +73,22 @@ export default function AddCourseModal({ faculty, onClose, onSave }) {
           <div>
             <label className="label">Venue</label>
             <input className="input" placeholder="e.g. FPAS CSC LH" value={form.description} onChange={(e) => set("description", e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Units (credit hours)</label>
+            <select className="input" value={form.units} onChange={(e) => set("units", Number(e.target.value))}>
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u}>{u} unit{u > 1 ? "s" : ""} ({u}{u === 3 ? " = 2hrs + 1hr" : u === 2 ? " = 2hrs block" : " = 1hr"} per week)</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Session</label>
+            <select className="input" value={form.session} onChange={(e) => set("session", e.target.value)}>
+              {SESSION_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s === "A" ? "A — Main session" : "B — Additional session (3-unit only)"}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Day</label>

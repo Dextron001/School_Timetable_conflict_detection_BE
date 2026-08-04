@@ -76,6 +76,10 @@ export default function UsersPage() {
     }
   }
 
+  function displayRole(role) {
+    return role === "admin" ? "Admin" : "Student";
+  }
+
   return (
     <div className="min-h-full">
       <DashboardHeader title="User Management" subtitle="Create, edit and remove accounts" />
@@ -130,7 +134,7 @@ export default function UsersPage() {
                     value={form.role}
                     onChange={(e) => setForm({ ...form, role: e.target.value })}
                   >
-                    <option value="client">Client (Student)</option>
+                    <option value="client">Student</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
@@ -172,7 +176,7 @@ export default function UsersPage() {
                             value={editForm.role}
                             onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                           >
-                            <option value="client">Client</option>
+                            <option value="client">Student</option>
                             <option value="admin">Admin</option>
                           </select>
                         </td>
@@ -203,7 +207,7 @@ export default function UsersPage() {
                                 : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
                             }`}
                           >
-                            {u.role}
+                            {displayRole(u.role)}
                           </span>
                         </td>
                         <td className="py-3 pr-4 text-right space-x-2">

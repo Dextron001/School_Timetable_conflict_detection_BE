@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from . import auth, schemas, timetable
 from .database import Base, engine, get_db
-from .models import Complaint, CourseItem, User
+from .models import Complaint, ComplaintMessage, CourseItem, User
 from .pdf_export import build_timetable_pdf
 from .seed import DEPARTMENT_POOLS, FACULTIES, seed_all
 
@@ -201,7 +201,7 @@ def conflicts(
     db: Session = Depends(get_db),
     current: User = Depends(auth.get_current_user),
 ):
-    """Return ids of courses that currently clash within a faculty."""
+    """Return conflict IDs and detailed cause information for each clash."""
     query = db.query(CourseItem)
     if faculty:
         fac = faculty.upper()
@@ -210,7 +210,12 @@ def conflicts(
         dept_codes = FACULTIES[fac]["departments"]
         query = query.filter(CourseItem.department.in_(dept_codes))
     courses = query.all()
-    return {"conflict_ids": sorted(timetable.find_conflicts(courses))}
+    conflict_ids = sorted(timetable.find_conflicts(courses))
+    conflict_details = timetable.find_conflict_details(courses)
+    return {
+        "conflict_ids": conflict_ids,
+        "conflicts": conflict_details,
+    }
 
 
 # --------------------------- Export -----------------------------
@@ -306,15 +311,7 @@ def create_complaint(
     db.add(complaint)
     db.commit()
     db.refresh(complaint)
-
-    # ── Email notification (disabled by default, enable via .env) ──
-    try:
-        from .email_service import send_complaint_notification
-        send_complaint_notification(complaint, current, db)
-    except Exception as e:
-        print(f"[Email] Could not send notification: {e}")
-
-    return _complaint_to_out(complaint, db)
+    return _complaint_to_out(complaint, db, current.id)
 
 
 @app.get("/complaints", tags=["complaints"])
@@ -334,7 +331,7 @@ def list_complaints(
     if status:
         query = query.filter(Complaint.status == status)
     complaints = query.order_by(Complaint.created_at.desc()).all()
-    return [_complaint_to_out(c, db) for c in complaints]
+    return [_complaint_to_out(c, db, current.id) for c in complaints]
 
 
 @app.patch("/complaints/{complaint_id}", response_model=schemas.ComplaintOut, tags=["complaints"])
@@ -354,7 +351,7 @@ def resolve_complaint(
     complaint.resolved_by = current.id
     db.commit()
     db.refresh(complaint)
-    return _complaint_to_out(complaint, db)
+    return _complaint_to_out(complaint, db, current.id)
 
 
 @app.get("/complaints/my", tags=["complaints"])
@@ -366,13 +363,109 @@ def my_complaints(
     complaints = db.query(Complaint).filter(
         Complaint.user_id == current.id,
     ).order_by(Complaint.created_at.desc()).all()
-    return [_complaint_to_out(c, db) for c in complaints]
+    return [_complaint_to_out(c, db, current.id) for c in complaints]
 
 
-def _complaint_to_out(complaint: Complaint, db: Session) -> dict:
+# ------------------- Complaint Messages -------------------------
+@app.post("/complaints/{complaint_id}/messages", response_model=schemas.ComplaintMessageOut, tags=["complaints"])
+def send_message(
+    complaint_id: int,
+    payload: schemas.ComplaintMessageCreate,
+    db: Session = Depends(get_db),
+    current: User = Depends(auth.get_current_user),
+):
+    """Send a message in a complaint thread. Both admin and student can send."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    # Student can only message their own complaints
+    if current.role == "client" and complaint.user_id != current.id:
+        raise HTTPException(status_code=403, detail="Not your complaint")
+
+    msg = ComplaintMessage(
+        complaint_id=complaint_id,
+        sender_id=current.id,
+        sender_role=current.role,
+        message=payload.message.strip(),
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return _message_to_out(msg, db)
+
+
+@app.get("/complaints/{complaint_id}/messages", response_model=list[schemas.ComplaintMessageOut], tags=["complaints"])
+def get_messages(
+    complaint_id: int,
+    db: Session = Depends(get_db),
+    current: User = Depends(auth.get_current_user),
+):
+    """Get all messages in a complaint thread."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    # Student can only view their own complaint messages
+    if current.role == "client" and complaint.user_id != current.id:
+        raise HTTPException(status_code=403, detail="Not your complaint")
+
+    messages = db.query(ComplaintMessage).filter(
+        ComplaintMessage.complaint_id == complaint_id,
+    ).order_by(ComplaintMessage.created_at.asc()).all()
+    return [_message_to_out(m, db) for m in messages]
+
+
+@app.get("/notifications", response_model=list[schemas.NotificationOut], tags=["complaints"])
+def get_notifications(
+    db: Session = Depends(get_db),
+    current: User = Depends(auth.get_current_user),
+):
+    """Get unread message notifications for the current user."""
+    if current.role == "admin":
+        # Admin sees notifications for complaints with unread student messages
+        complaints = db.query(Complaint).all()
+    else:
+        # Student sees notifications for their own complaints with unread admin messages
+        complaints = db.query(Complaint).filter(Complaint.user_id == current.id).all()
+
+    notifications = []
+    for c in complaints:
+        # Count messages NOT sent by the current user
+        unread = db.query(ComplaintMessage).filter(
+            ComplaintMessage.complaint_id == c.id,
+            ComplaintMessage.sender_id != current.id,
+        ).count()
+
+        if unread > 0:
+            latest = db.query(ComplaintMessage).filter(
+                ComplaintMessage.complaint_id == c.id,
+                ComplaintMessage.sender_id != current.id,
+            ).order_by(ComplaintMessage.created_at.desc()).first()
+
+            notifications.append({
+                "complaint_id": c.id,
+                "subject": c.subject,
+                "unread_count": unread,
+                "latest_message": latest.message[:80] if latest else None,
+                "latest_sender": latest.sender_role if latest else None,
+                "latest_time": latest.created_at.strftime("%Y-%m-%d %H:%M") if latest else None,
+            })
+
+    return notifications
+
+
+# ----------------------------- Helpers -----------------------------
+def _complaint_to_out(complaint: Complaint, db: Session, current_user_id: int) -> dict:
     """Convert a Complaint ORM object to a dict matching ComplaintOut schema."""
     submitter = db.query(User).filter(User.id == complaint.user_id).first()
     resolver = db.query(User).filter(User.id == complaint.resolved_by).first() if complaint.resolved_by else None
+
+    # Count unread messages (messages NOT sent by the current user)
+    unread_count = db.query(ComplaintMessage).filter(
+        ComplaintMessage.complaint_id == complaint.id,
+        ComplaintMessage.sender_id != current_user_id,
+    ).count()
 
     def fmt_dt(dt):
         if dt is None:
@@ -393,6 +486,27 @@ def _complaint_to_out(complaint: Complaint, db: Session) -> dict:
         "created_at": fmt_dt(complaint.created_at),
         "resolved_at": fmt_dt(complaint.resolved_at),
         "resolved_by": resolver.username if resolver else None,
+        "unread_count": unread_count,
+    }
+
+
+def _message_to_out(msg: ComplaintMessage, db: Session) -> dict:
+    """Convert a ComplaintMessage ORM object to a dict."""
+    sender = db.query(User).filter(User.id == msg.sender_id).first()
+
+    def fmt_dt(dt):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+    return {
+        "id": msg.id,
+        "complaint_id": msg.complaint_id,
+        "sender_id": msg.sender_id,
+        "sender_name": sender.full_name if sender else "Unknown",
+        "sender_role": msg.sender_role,
+        "message": msg.message,
+        "created_at": fmt_dt(msg.created_at),
     }
 
 

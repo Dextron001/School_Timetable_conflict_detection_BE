@@ -1,19 +1,21 @@
 import { useAuth } from "../context/AuthContext";
 import ThemeToggle from "./ThemeToggle";
 
+const PCU_LOGO_URL = "https://pcu.edu.ng/storage/settings/site_logo_header.png";
+
 export default function DashboardHeader({ title, subtitle }) {
   const { user, logout } = useAuth();
+
+  function displayRole(role) {
+    return role === "admin" ? "Admin" : "Student";
+  }
 
   return (
     <header className="border-b border-line bg-card/80 backdrop-blur sticky top-0 z-30">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-brand shadow-soft grid place-items-center ring-1 ring-black/5">
-            <svg viewBox="0 0 48 48" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M16 32 L32 16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx="15" cy="33" r="6.5" stroke="white" strokeWidth="2.5" />
-              <circle cx="33" cy="15" r="6.5" fill="white" />
-            </svg>
+          <div className="h-9 w-9 rounded-lg bg-white shadow-soft grid place-items-center ring-1 ring-black/5 overflow-hidden">
+            <img src={PCU_LOGO_URL} alt="PCU" className="h-8 w-8 object-contain" />
           </div>
           <div className="leading-tight">
             <p className="font-bold text-sm">{title}</p>
@@ -39,7 +41,7 @@ export default function DashboardHeader({ title, subtitle }) {
                   : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
               }`}
             >
-              {user?.role}
+              {displayRole(user?.role)}
             </span>
           </div>
           <button className="btn-ghost !py-2" onClick={logout}>

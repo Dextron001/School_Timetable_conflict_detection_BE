@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import ThemeToggle from "../components/ThemeToggle";
 
+const PCU_LOGO_URL = "https://pcu.edu.ng/storage/settings/site_logo_header.png";
+
 export default function Login() {
   const { login } = useAuth();
   const toast = useToast();
@@ -38,14 +40,9 @@ export default function Login() {
       </div>
 
       <div className="w-full max-w-md">
-               <div className="text-center mb-8">
-          {/* Hand-crafted brand mark: two nodes joined by a link line */}
-          <div className="mx-auto mb-5 h-16 w-16 rounded-2xl bg-brand shadow-soft grid place-items-center ring-1 ring-black/5">
-            <svg viewBox="0 0 48 48" className="h-9 w-9" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M16 32 L32 16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx="15" cy="33" r="6.5" stroke="white" strokeWidth="2.5" />
-              <circle cx="33" cy="15" r="6.5" fill="white" />
-            </svg>
+        <div className="text-center mb-8">
+          <div className="mx-auto mb-5 h-16 w-16 rounded-2xl bg-white shadow-soft grid place-items-center ring-1 ring-black/5 overflow-hidden">
+            <img src={PCU_LOGO_URL} alt="PCU Logo" className="h-14 w-14 object-contain" />
           </div>
 
           <h1 className="font-serif text-4xl tracking-tight text-ink select-none">
@@ -66,7 +63,7 @@ export default function Login() {
               className="input"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin or client"
+              placeholder="admin or student"
               required
             />
           </div>
@@ -93,14 +90,14 @@ export default function Login() {
                 onClick={() => quickFill("admin", "admin123")}
                 className="badge bg-brand/15 text-brand hover:bg-brand/25"
               >
-                admin / admin123
+                admin 
               </button>
               <button
                 type="button"
                 onClick={() => quickFill("client", "client123")}
                 className="badge bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300"
               >
-                client / client123
+                student 
               </button>
             </div>
           </div>
