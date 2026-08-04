@@ -731,17 +731,17 @@ def seed_users(db: Session) -> None:
         User(username="client", full_name="Student User",
              hashed_password=hash_password("client123"), role="client"),
         User(username="ireoluwa", full_name="Ireoluwa",
-             hashed_password=hash_password("ireoluwa123"), role="admin"),
+             hashed_password=hash_password("ireoluwa123"), role="client"),
         User(username="damilola", full_name="Damilola",
-             hashed_password=hash_password("damilola123"), role="admin"),
+             hashed_password=hash_password("damilola123"), role="client"),
         User(username="biola", full_name="Biola",
-             hashed_password=hash_password("biola123"), role="admin"),
+             hashed_password=hash_password("biola123"), role="client"),
         User(username="diamond", full_name="Diamond",
-             hashed_password=hash_password("diamond123"), role="admin"),
+             hashed_password=hash_password("diamond123"), role="client"),
         User(username="great", full_name="Great",
-             hashed_password=hash_password("great123"), role="admin"),
+             hashed_password=hash_password("great123"), role="client"),
         User(username="emmanuel", full_name="Emmanuel",
-             hashed_password=hash_password("emmanuel123"), role="admin"),
+             hashed_password=hash_password("emmanuel123"), role="client"),
     ]
     db.add_all(users)
     db.commit()
